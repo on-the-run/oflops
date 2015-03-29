@@ -168,7 +168,7 @@ int fakeswitch_get_count(struct fakeswitch *fs)
     while( (count = msgbuf_read(fs->inbuf,fs->sock)) > 0) {
         while(count > 0) {
             // need to read msg by msg to ensure framing isn't broken
-            ofph = msgbuf_peek(fs->inbuf);
+            ofph = (struct ofp_header *)msgbuf_peek(fs->inbuf);
             msglen = ntohs(ofph->length);
             if(count < msglen)
                 break;     // msg not all there yet; 
@@ -236,6 +236,16 @@ static int              make_features_reply(int id, int xid, char * buf, int buf
 /***********************************************************************/
 static int      make_stats_desc_reply(struct ofp_stats_request * req, 
         char * buf, int buflen) {
+	#ifdef USE_GPP
+	char temp[DESC_STR_LEN];
+	memset(temp, 0, DESC_STR_LEN);
+	static struct ofp_desc_stats cbench_desc;
+	memcpy(cbench_desc.mfr_desc, "Cbench - controller I/O benchmark", DESC_STR_LEN);
+	memcpy(cbench_desc.hw_desc, "this is actually software...", DESC_STR_LEN);
+	memcpy(cbench_desc.sw_desc, "version " VERSION, DESC_STR_LEN);
+	memcpy(cbench_desc.serial_num, "none", DESC_STR_LEN);
+	memcpy(cbench_desc.dp_desc, "none", DESC_STR_LEN);
+	#else
     static struct ofp_desc_stats cbench_desc = { 
         .mfr_desc = "Cbench - controller I/O benchmark",
         .hw_desc  = "this is actually software...",
@@ -243,6 +253,8 @@ static int      make_stats_desc_reply(struct ofp_stats_request * req,
         .serial_num= "none",
         .dp_desc  = "none"
     };
+	#endif
+
     struct ofp_stats_reply * reply;
     int len = sizeof(struct ofp_stats_reply) + 
                 sizeof(struct ofp_desc_stats);
@@ -370,7 +382,7 @@ void fakeswitch_handle_read(struct fakeswitch *fs)
     }
     while((count= msgbuf_count_buffered(fs->inbuf)) >= sizeof(struct ofp_header ))
     {
-        ofph = msgbuf_peek(fs->inbuf);
+        ofph = (struct ofp_header *)msgbuf_peek(fs->inbuf);
         if(count < ntohs(ofph->length))
             return;     // msg not all there yet
         msgbuf_pull(fs->inbuf, NULL, ntohs(ofph->length));

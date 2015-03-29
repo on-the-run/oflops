@@ -19,6 +19,8 @@
 
 #include <openflow/openflow.h>
 
+#include <unordered_map>
+
 #include "myargs.h"
 #include "cbench.h"
 #include "fakeswitch.h"
@@ -49,7 +51,7 @@ struct myargs my_options[] = {
     {"learn-dst-macs",  'L', "send gratuitious ARP replies to learn destination macs before testing", MYARGS_FLAG, {.flag = 1}},
     {"dpid-offset",  'o', "switch DPID offset", MYARGS_INTEGER, {.integer = 1}},
     {"packetin-rate", 'R', "rate limit of sending packet-in (pkts/s)", MYARGS_INTEGER, {.integer = -1}},
-    {0, 0, 0, 0}
+    {0, 0, 0, MYARGS_NONE}
 };
 
 /*******************************************************************/
@@ -66,7 +68,7 @@ double run_test(int n_fakeswitches, struct fakeswitch * fakeswitches, int mstest
     int nr_pktin_to_send = (rate == -1) ? -1 : (int)(total_wait * (rate/1000.0));
     time_t tNow;
     struct tm *tmNow;
-    pollfds = malloc(n_fakeswitches * sizeof(struct pollfd));
+    pollfds = (struct pollfd *)malloc(n_fakeswitches * sizeof(struct pollfd));
     assert(pollfds);
     gettimeofday(&then,NULL);
     while(1)
@@ -89,7 +91,7 @@ double run_test(int n_fakeswitches, struct fakeswitch * fakeswitches, int mstest
 
 
         for(i = 0; i < nfds; i++) {
-            fakeswitch_handle_io(events[i].data.ptr, &(events[i].events), &nr_pktin_to_send);
+            fakeswitch_handle_io((struct fakeswitch*)events[i].data.ptr, &(events[i].events), &nr_pktin_to_send);
         }
         #else
         for(i = 0; i < n_fakeswitches; i++) 
@@ -414,14 +416,14 @@ int main(int argc, char * argv[])
                 connect_delay,connect_group_size,
                 debug == 1 ? "on" : "off");
     /* done parsing args */
-    fakeswitches = malloc(n_fakeswitches * sizeof(struct fakeswitch));
+    fakeswitches = (struct fakeswitch *)malloc(n_fakeswitches * sizeof(struct fakeswitch));
     assert(fakeswitches);
 
     double *results;
     double  min = DBL_MAX;
     double  max = 0.0;
     double  v;
-    results = malloc(tests_per_loop * sizeof(double));
+    results = (double *)malloc(tests_per_loop * sizeof(double));
 
     #ifdef USE_EPOLL
     struct epoll_event ev;
@@ -451,7 +453,7 @@ int main(int argc, char * argv[])
             fprintf(stderr,"Initializing switch %d ... ", i+1);
         fflush(stderr);
         #ifdef USE_EPOLL
-        fakeswitch_init(&fakeswitches[i],dpid_offset+i,sock,BUFLEN, debug, delay, mode, total_mac_addresses, learn_dst_macs);
+        fakeswitch_init(&fakeswitches[i],dpid_offset+i,sock,BUFLEN, debug, delay, (test_mode)mode, total_mac_addresses, learn_dst_macs);
         #else
         fakeswitch_init(&fakeswitches[i], 0, sock, 65536, debug, delay, mode, total_mac_addresses, learn_dst_macs);
         #endif

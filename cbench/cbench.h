@@ -7,6 +7,7 @@
 
 #ifdef __linux__
 #define USE_EPOLL
+#define USE_GPP
 #endif
 
 #endif

@@ -67,6 +67,11 @@ int msgbuf_write(struct msgbuf * mbuf, int sock, int len)
 		if (send_len > len)
 			send_len = len;
 	}
+
+	/* Yiyang: timestamp each opf header to track response time before sending
+	 * them */
+	//timestamp_opf(mbuf);
+
     int count = write(sock, &mbuf->buf[mbuf->start], send_len);
     if(count>0)
         mbuf->start+=count;

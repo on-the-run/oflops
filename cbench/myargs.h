@@ -26,7 +26,9 @@ struct myargs {
     } default_val;
 };
 
-
+#ifdef USE_GPP
+extern "C" {
+#endif
 
 /** 
  *  print
@@ -105,5 +107,8 @@ myargs_get_default_flag(struct myargs options[], char * argname);
 double 
 myargs_get_default_decimal(struct myargs options[], char * argname);
 
+#ifdef USE_GPP
+}
+#endif
 
 #endif

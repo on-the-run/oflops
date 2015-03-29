@@ -61,7 +61,7 @@ myargs_to_long(struct myargs options[])
     struct option * longopts;
     int n = count_options(options);
     int i;
-    longopts = malloc(sizeof(struct option) * (n+1));
+    longopts = (struct option *)malloc(sizeof(struct option) * (n+1));
     for(i=0;i<=n;i++)
     {
         if(options[i].name)
@@ -89,7 +89,7 @@ myargs_to_short(struct myargs options[])
     int len=0;
     //int max = n*2 + 1;
     int max = n*3 + 1; // The original code is a bug --Yiyang
-    shortargs = malloc(max);
+    shortargs = (char *)malloc(max);
     memset(shortargs, 0, max);
     for(i=0; i< n; i++)
     {
