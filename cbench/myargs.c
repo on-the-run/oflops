@@ -87,8 +87,10 @@ myargs_to_short(struct myargs options[])
     int n = count_options(options);
     int i;
     int len=0;
-    int max = n*2 + 1;
+    //int max = n*2 + 1;
+    int max = n*3 + 1; // The original code is a bug --Yiyang
     shortargs = malloc(max);
+    memset(shortargs, 0, max);
     for(i=0; i< n; i++)
     {
         len+= snprintf(&shortargs[len], max-len, "%c", 

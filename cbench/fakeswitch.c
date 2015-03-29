@@ -31,7 +31,7 @@ static int make_config_reply( int xid, char * buf, int buflen);
 static int make_vendor_reply(int xid, char * buf, int buflen);
 static int make_packet_in(int switch_id, int xid, int buffer_id, char * buf, int buflen, int mac_address);
 static int packet_out_is_lldp(struct ofp_packet_out * po);
-static void fakeswitch_handle_write(struct fakeswitch *fs);
+static void fakeswitch_handle_write(struct fakeswitch *fs, int* ptr_nr_pktin_to_send);
 static void fakeswitch_learn_dstmac(struct fakeswitch *fs);
 void fakeswitch_change_status_now (struct fakeswitch *fs, int new_status);
 void fakeswitch_change_status (struct fakeswitch *fs, int new_status);
@@ -479,7 +479,7 @@ void fakeswitch_handle_read(struct fakeswitch *fs)
     }
 }
 /***********************************************************************/
-static void fakeswitch_handle_write(struct fakeswitch *fs)
+static void fakeswitch_handle_write(struct fakeswitch *fs, int* ptr_nr_pktin_to_send)
 {
     char buf[BUFLEN];
     int count ;
@@ -493,6 +493,14 @@ static void fakeswitch_handle_write(struct fakeswitch *fs)
         else if ((fs->mode == MODE_THROUGHPUT) && 
                 (msgbuf_count_buffered(fs->outbuf) < throughput_buffer))  // keep buffer full
             send_count = (throughput_buffer - msgbuf_count_buffered(fs->outbuf)) / fs->probe_size;
+
+        if (*ptr_nr_pktin_to_send != -1 && send_count > *ptr_nr_pktin_to_send)
+            send_count = *ptr_nr_pktin_to_send;
+
+        if (*ptr_nr_pktin_to_send != -1) {
+            *ptr_nr_pktin_to_send -= send_count;
+        }
+
         for (i = 0; i < send_count; i++)
         {
             // queue up packet
@@ -525,14 +533,14 @@ static void fakeswitch_handle_write(struct fakeswitch *fs)
         msgbuf_write(fs->outbuf, fs->sock, 0);
 }
 /***********************************************************************/
-void fakeswitch_handle_io(struct fakeswitch *fs, void *pfd_events)
+void fakeswitch_handle_io(struct fakeswitch *fs, void *pfd_events, int* ptr_nr_pktin_to_send)
 {
     #ifdef USE_EPOLL
     int events = *((int*) pfd_events);
     if(events & EPOLLIN) {
         fakeswitch_handle_read(fs);
     } else if(events & EPOLLOUT) {
-        fakeswitch_handle_write(fs);
+        fakeswitch_handle_write(fs, ptr_nr_pktin_to_send);
     }
     #else
     struct pollfd *pfd = (struct pollfd*)pfd_events;

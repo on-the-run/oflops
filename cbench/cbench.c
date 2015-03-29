@@ -48,11 +48,12 @@ struct myargs my_options[] = {
     {"connect-group-size",  'I', "number of switches in a connection delay group", MYARGS_INTEGER, {.integer = 1}},
     {"learn-dst-macs",  'L', "send gratuitious ARP replies to learn destination macs before testing", MYARGS_FLAG, {.flag = 1}},
     {"dpid-offset",  'o', "switch DPID offset", MYARGS_INTEGER, {.integer = 1}},
+    {"packetin-rate", 'R', "rate limit of sending packet-in (pkts/s)", MYARGS_INTEGER, {.integer = -1}},
     {0, 0, 0, 0}
 };
 
 /*******************************************************************/
-double run_test(int n_fakeswitches, struct fakeswitch * fakeswitches, int mstestlen, int delay)
+double run_test(int n_fakeswitches, struct fakeswitch * fakeswitches, int mstestlen, int delay, int rate)
 {
     struct timeval now, then, diff;
     struct  pollfd  * pollfds;
@@ -62,6 +63,7 @@ double run_test(int n_fakeswitches, struct fakeswitch * fakeswitches, int mstest
     int count;
 
     int total_wait = mstestlen + delay;
+    int nr_pktin_to_send = (rate == -1) ? -1 : (int)(total_wait * (rate/1000.0));
     time_t tNow;
     struct tm *tmNow;
     pollfds = malloc(n_fakeswitches * sizeof(struct pollfd));
@@ -71,8 +73,12 @@ double run_test(int n_fakeswitches, struct fakeswitch * fakeswitches, int mstest
     {
         gettimeofday(&now, NULL);
         timersub(&now, &then, &diff);
-        if( (1000* diff.tv_sec  + (float)diff.tv_usec/1000)> total_wait)
+        if( (1000* diff.tv_sec  + (float)diff.tv_usec/1000)> total_wait) {
+            if (nr_pktin_to_send > 0) {
+                fprintf(stderr, "[WARNING] couldn't reach requested packet-in send rate!\n");
+            }
             break;
+        }
 
         #ifdef USE_EPOLL
         for(i = 0; i < MAX_EVENTS; i++) {
@@ -83,7 +89,7 @@ double run_test(int n_fakeswitches, struct fakeswitch * fakeswitches, int mstest
 
 
         for(i = 0; i < nfds; i++) {
-            fakeswitch_handle_io(events[i].data.ptr, &(events[i].events));
+            fakeswitch_handle_io(events[i].data.ptr, &(events[i].events), &nr_pktin_to_send);
         }
         #else
         for(i = 0; i < n_fakeswitches; i++) 
@@ -160,10 +166,10 @@ int timeout_connect(int fd, const char * hostname, int port, int mstimeout) {
 	
     #ifdef USE_EPOLL
     struct epoll_event ev;
-    int epollfd = epoll_create(1);
+    int epollfd_ = epoll_create(1);
     ev.events = EPOLLIN | EPOLLOUT | EPOLLERR;
 	ev.data.fd = fd;
-	if(epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev) == -1) {
+	if(epoll_ctl(epollfd_, EPOLL_CTL_ADD, fd, &ev) == -1) {
 	    printf("Cannot use epoll to create connection\n");
 	    return -1;
 	}
@@ -189,7 +195,7 @@ int timeout_connect(int fd, const char * hostname, int port, int mstimeout) {
 		    }
         }
         #ifdef USE_EPOLL
-	    int nfds = epoll_wait(epollfd, &ev, 1, mstimeout);
+	    int nfds = epoll_wait(epollfd_, &ev, 1, mstimeout);
         #else
         ret = select(fd + 1, NULL, &fds, NULL, &tv);
         #endif
@@ -197,7 +203,7 @@ int timeout_connect(int fd, const char * hostname, int port, int mstimeout) {
     freeaddrinfo(res);
 
     #ifdef USE_EPOLL
-    close(epollfd);
+    close(epollfd_);
 	
     if(ev.events & EPOLLERR) {
 	    return -1;
@@ -300,6 +306,7 @@ int main(int argc, char * argv[])
     int     learn_dst_macs = myargs_get_default_flag(my_options, "learn-dst-macs");
     int     dpid_offset = myargs_get_default_integer(my_options, "dpid-offset");
     int     mode = MODE_LATENCY;
+    int     send_rate = myargs_get_default_integer(my_options, "packetin-rate");
     int     i,j;
 
     const struct option * long_opts = myargs_to_long(my_options);
@@ -368,6 +375,9 @@ int main(int argc, char * argv[])
                 break;
             case 'o':
                 dpid_offset = atoi(optarg);
+                break;
+            case 'R':
+                send_rate = atoi(optarg);
                 break;
             default: 
                 myargs_usage(my_options, PROG_TITLE, "help message", NULL, 1);
@@ -468,7 +478,7 @@ int main(int argc, char * argv[])
         for( j = 0; j < tests_per_loop; j ++) {
             if ( j > 0 )
                 delay = 0;      // only delay on the first run
-            v = 1000.0 * run_test(i+1, fakeswitches, mstestlen, delay);
+            v = 1000.0 * run_test(i+1, fakeswitches, mstestlen, delay, send_rate);
             results[j] = v;
 			if(j<warmup || j >= tests_per_loop-cooldown) 
 				continue;

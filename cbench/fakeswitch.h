@@ -71,7 +71,7 @@ void fakeswitch_set_pollfd(struct fakeswitch *fs, struct pollfd *pfd);
  * @param fs    Pointer to initalized fakeswitch
  * @param pfd   Pointer to an allocated poll structure or the number of events as int
  */
-void fakeswitch_handle_io(struct fakeswitch *fs, void* pfd_events);
+void fakeswitch_handle_io(struct fakeswitch *fs, void* pfd_events, int* nr_pktin_to_send);
 /**** Get and reset count 
  * @param fs    Pointer to initialized fakeswitch
  * @return      Number of flow_mod responses since last call
