@@ -15,17 +15,17 @@
 #ifdef USE_GPP
 #include <arpa/inet.h>
 #include <time.h>
-#include <openflow/openflow.h>
-#include "cbench/cbench.h"
+#include "openflow.h"
+#include "cbench.h"
 #endif
 
 struct msgbuf *  msgbuf_new(int bufsize)
 {
     struct msgbuf * mbuf;
-    mbuf = malloc(sizeof(*mbuf));
+    mbuf = (struct msgbuf*)malloc(sizeof(*mbuf));
     assert(mbuf);
     mbuf->len = bufsize;
-    mbuf->buf = malloc(mbuf->len);
+    mbuf->buf = (char*)malloc(mbuf->len);
     assert(mbuf->len);
     mbuf->start = mbuf->end = 0;
 
@@ -62,37 +62,35 @@ int msgbuf_read_all(struct msgbuf * mbuf, int sock, int len)
     return count;
 }
 
+#ifdef USE_GPP
 static void timestamp_opf_header(struct msgbuf * mbuf, int switch_id) {
     struct ofp_packet_in* pi;
-    //struct ether_header* eth;
 	int count = mbuf->end - mbuf->start;
     int msglen;
     struct _timestamp *ts = (struct _timestamp*)malloc(sizeof(struct _timestamp));
     struct timespec tp_start;
 	int index = mbuf->start;
-    //unordered_map<int, struct _timestamp*> temp;
 
-    clock_gettime(CLOCK_REALTIME, &tp_start);
-    ts->time = tp_start.tv_sec*1E9 + tp_start.tv_nsec;
+    clock_gettime(CLOCK_MONOTONIC, &tp_start);
+	//fprintf(stdout, "start sec = %d, nsec = %ld\n", tp_start.tv_sec, tp_start.tv_nsec);
+	memcpy(&(ts->tp), &tp_start, sizeof(struct timespec));
     ts->dirty = true;
 
 
     while (count > 0) {
         pi = (struct ofp_packet_in*)(&mbuf->buf[index]);
-		printf("=================> type = %d\n", (int)pi->header.type);
+		//printf("=================> type = %02x\n", (uint8_t)pi->header.type);
         if (pi->header.type == OFPT_PACKET_IN) {
-            //eth = (struct ether_header * ) pi->data;
-            //switch_id = eth->ether_shost[5];
-            //temp.first = ofph->xid;
-            //temp.second = ts;
-            timetable[switch_id][ofph->xid] = ts;
-            //timetable.insert({switch_id, {ofph->xid, ts}});
-            msglen = ntohs(ofph->length);
+			//fprintf(stdout, "============> xid = %d\n", ntohl(pi->header.xid));
+            timetable[switch_id][ntohl(pi->header.xid)] = ts;
+            msglen = ntohs(pi->header.length);
             count -= msglen;
 			index += msglen;
-        }
+        } else
+			break;
     }
 }
+#endif
 
 /**********************************************************************/
 int msgbuf_write(struct msgbuf * mbuf, int sock, int len, int switch_id)
@@ -123,7 +121,7 @@ int msgbuf_write_all(struct msgbuf * mbuf, int sock, int len)
     int tmp=0,count=0;
     while(mbuf->start < mbuf->end)
     {
-        tmp=msgbuf_write(mbuf, sock, len);
+        tmp=msgbuf_write(mbuf, sock, len, -1);
         if((tmp < 0) && 
                 (errno != EAGAIN) && 
                 (errno != EWOULDBLOCK) && 
@@ -144,7 +142,7 @@ void msgbuf_clear(struct msgbuf * mbuf)
 void msgbuf_grow(struct msgbuf * mbuf)
 {
     mbuf->len *=2 ;
-    mbuf->buf = realloc(mbuf->buf, mbuf->len);
+    mbuf->buf = (char*)realloc(mbuf->buf, mbuf->len);
     if(mbuf->buf == NULL) {
       perror("msgbuf_grow failed");
       printf("buffer len: %d\n", mbuf->len);

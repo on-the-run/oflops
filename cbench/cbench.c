@@ -17,9 +17,8 @@
 #include <sys/types.h>
 #include <sys/time.h>
 
-#include <openflow/openflow.h>
-
-#include <unordered_map>
+//#include <openflow/openflow.h>
+#include "openflow.h"
 
 #include "myargs.h"
 #include "cbench.h"
@@ -30,6 +29,10 @@
 #define MAX_EVENTS	16
 struct epoll_event events[MAX_EVENTS];
 int epollfd;
+#endif
+
+#ifdef USE_GPP
+unordered_map<int, unordered_map<int, struct _timestamp*>> timetable;
 #endif
 
 struct myargs my_options[] = {
@@ -54,6 +57,22 @@ struct myargs my_options[] = {
     {0, 0, 0, MYARGS_NONE}
 };
 
+void print_response_time() {
+	FILE* fp = fopen("respTime.dat", "w");
+	unordered_map<int, unordered_map<int, struct _timestamp*>>::const_iterator it = timetable.begin();
+	for (; it != timetable.end(); it++) {
+		unordered_map<int, struct _timestamp*>::const_iterator itt = (it->second).begin();
+		for (; itt != (it->second).end(); itt++) {
+			if (!(itt->second->dirty)) {
+				//fprintf(stdout, "switch_id = %d, xid = %d, time = %f ms\n", it->first, itt->first, (itt->second->tp.tv_sec)*(1000) + (itt->second->tp.tv_nsec)/(1000000.0));
+				fprintf(fp, "switch_id,%d,xid,%d,time,%f,ms\n", it->first, itt->first, (itt->second->tp.tv_sec)*(1000) + (itt->second->tp.tv_nsec)/(1000000.0));
+				free(itt->second);
+			}
+		}
+	}
+	fclose(fp);
+}
+
 /*******************************************************************/
 double run_test(int n_fakeswitches, struct fakeswitch * fakeswitches, int mstestlen, int delay, int rate)
 {
@@ -68,7 +87,7 @@ double run_test(int n_fakeswitches, struct fakeswitch * fakeswitches, int mstest
     int nr_pktin_to_send = (rate == -1) ? -1 : (int)(total_wait * (rate/1000.0));
     time_t tNow;
     struct tm *tmNow;
-    pollfds = (struct pollfd *)malloc(n_fakeswitches * sizeof(struct pollfd));
+    pollfds = (struct pollfd*)malloc(n_fakeswitches * sizeof(struct pollfd));
     assert(pollfds);
     gettimeofday(&then,NULL);
     while(1)
@@ -416,14 +435,14 @@ int main(int argc, char * argv[])
                 connect_delay,connect_group_size,
                 debug == 1 ? "on" : "off");
     /* done parsing args */
-    fakeswitches = (struct fakeswitch *)malloc(n_fakeswitches * sizeof(struct fakeswitch));
+    fakeswitches = (struct fakeswitch*)malloc(n_fakeswitches * sizeof(struct fakeswitch));
     assert(fakeswitches);
 
     double *results;
     double  min = DBL_MAX;
     double  max = 0.0;
     double  v;
-    results = (double *)malloc(tests_per_loop * sizeof(double));
+    results = (double*)malloc(tests_per_loop * sizeof(double));
 
     #ifdef USE_EPOLL
     struct epoll_event ev;
@@ -507,6 +526,8 @@ int main(int argc, char * argv[])
                 counted_tests,
                 min, max, avg, std_dev);
     }
+
+	print_response_time();
 
     return 0;
 }

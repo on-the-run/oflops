@@ -5,7 +5,8 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <openflow/openflow.h>
+//#include <openflow/openflow.h>
+#include "openflow.h"
 
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -15,12 +16,17 @@
 
 #include <netinet/in.h>
 
-#include "config.h"
 #include "cbench.h"
 #include "fakeswitch.h"
 
 #ifdef USE_EPOLL
 #include <sys/epoll.h>
+#endif
+
+#ifdef USE_GPP
+#include <time.h>
+#else
+#include "config.h"
 #endif
 
 static int debug_msg(struct fakeswitch * fs, char * msg, ...);
@@ -168,7 +174,7 @@ int fakeswitch_get_count(struct fakeswitch *fs)
     while( (count = msgbuf_read(fs->inbuf,fs->sock)) > 0) {
         while(count > 0) {
             // need to read msg by msg to ensure framing isn't broken
-            ofph = (struct ofp_header *)msgbuf_peek(fs->inbuf);
+            ofph = (struct ofp_header*)msgbuf_peek(fs->inbuf);
             msglen = ntohs(ofph->length);
             if(count < msglen)
                 break;     // msg not all there yet; 
@@ -236,13 +242,13 @@ static int              make_features_reply(int id, int xid, char * buf, int buf
 /***********************************************************************/
 static int      make_stats_desc_reply(struct ofp_stats_request * req, 
         char * buf, int buflen) {
+
 	#ifdef USE_GPP
-	char temp[DESC_STR_LEN];
-	memset(temp, 0, DESC_STR_LEN);
-	static struct ofp_desc_stats cbench_desc;
+    static struct ofp_desc_stats cbench_desc;
+	memset(&cbench_desc, 0, sizeof(struct ofp_desc_stats));
 	memcpy(cbench_desc.mfr_desc, "Cbench - controller I/O benchmark", DESC_STR_LEN);
 	memcpy(cbench_desc.hw_desc, "this is actually software...", DESC_STR_LEN);
-	memcpy(cbench_desc.sw_desc, "version " VERSION, DESC_STR_LEN);
+	memcpy(cbench_desc.sw_desc, "version", DESC_STR_LEN);
 	memcpy(cbench_desc.serial_num, "none", DESC_STR_LEN);
 	memcpy(cbench_desc.dp_desc, "none", DESC_STR_LEN);
 	#else
@@ -369,6 +375,12 @@ void fakeswitch_handle_read(struct fakeswitch *fs)
     struct ofp_header echo;
     struct ofp_header barrier;
     char buf[BUFLEN];
+
+	#ifdef USE_GPP
+    struct timespec tp_end;
+	//long endtime;
+	#endif
+
     count = msgbuf_read(fs->inbuf, fs->sock);   // read any queued data
     if (count <= 0)
     {
@@ -380,12 +392,21 @@ void fakeswitch_handle_read(struct fakeswitch *fs)
         fprintf(stderr, "... exiting\n");
         exit(1);
     }
+
+	#ifdef USE_GPP
+	clock_gettime(CLOCK_MONOTONIC, &tp_end);
+	//fprintf(stdout, "end sec = %d, nsec = %ld\n", tp_end.tv_sec, tp_end.tv_nsec);
+	int xid;
+	#endif
+
     while((count= msgbuf_count_buffered(fs->inbuf)) >= sizeof(struct ofp_header ))
     {
-        ofph = (struct ofp_header *)msgbuf_peek(fs->inbuf);
+        ofph = (struct ofp_header*)msgbuf_peek(fs->inbuf);
         if(count < ntohs(ofph->length))
             return;     // msg not all there yet
         msgbuf_pull(fs->inbuf, NULL, ntohs(ofph->length));
+
+
         switch(ofph->type)
         {
             struct ofp_flow_mod * fm;
@@ -397,6 +418,26 @@ void fakeswitch_handle_read(struct fakeswitch *fs)
                     // assume this is in response to what we sent
                     fs->count++;        // got response to what we went
                     fs->probe_state--;
+
+					#ifdef USE_GPP
+					xid = ntohl(po->header.xid);
+					if (timetable.find(fs->id) != timetable.end()) {
+						if (timetable[fs->id].find(xid) != timetable[fs->id].end()) {
+							if (timetable[fs->id][xid]->dirty) {
+								timetable[fs->id][xid]->tp.tv_sec = tp_end.tv_sec - timetable[fs->id][xid]->tp.tv_sec;
+								timetable[fs->id][xid]->tp.tv_nsec = tp_end.tv_nsec - timetable[fs->id][xid]->tp.tv_nsec;
+								//fprintf(stdout, "diff sec = %d, nsec = %ld\n", timetable[fs->id][xid]->tp.tv_sec, timetable[fs->id][xid]->tp.tv_nsec);
+								timetable[fs->id][xid]->dirty = false;
+							} else {
+								fprintf(stderr, "[WARNING] Packet_out: Unexpected duplicate xid = %d, switch_id = %d\n", xid, fs->id);
+							}
+						} else {
+							fprintf(stderr, "[WARNING] Packet_out: Unexpected xid = %d, switch_id = %d\n", xid, fs->id);
+						}
+					} else {
+						fprintf(stderr, "[WARNING] Packet_out: Unexpected switch_id = %d\n", fs->id);
+					}
+					#endif
                 }
                 break;
             case OFPT_FLOW_MOD:
@@ -406,6 +447,25 @@ void fakeswitch_handle_read(struct fakeswitch *fs)
                 {
                     fs->count++;        // got response to what we went
                     fs->probe_state--;
+
+					#ifdef USE_GPP
+					xid = ntohl(fm->header.xid);
+					if (timetable.find(fs->id) != timetable.end()) {
+						if (timetable[fs->id].find(xid) != timetable[fs->id].end()) {
+							if (timetable[fs->id][xid]->dirty) {
+								timetable[fs->id][xid]->tp.tv_sec = tp_end.tv_sec - timetable[fs->id][xid]->tp.tv_sec;
+								timetable[fs->id][xid]->tp.tv_nsec = tp_end.tv_nsec - timetable[fs->id][xid]->tp.tv_nsec;
+								timetable[fs->id][xid]->dirty = false;
+							} else {
+								fprintf(stderr, "[WARNING] Flow_mod: Unexpected duplicate xid = %d, switch_id = %d\n", xid, fs->id);
+							}
+						} else {
+							fprintf(stderr, "[WARNING] Flow_mod: Unexpected xid = %d, switch_id = %d\n", xid, fs->id);
+						}
+					} else {
+						fprintf(stderr, "[WARNING] Flow_mod: Unexpected switch_id = %d\n", fs->id);
+					}
+					#endif
                 }
                 break;
             case OFPT_FEATURES_REQUEST:
@@ -542,7 +602,7 @@ static void fakeswitch_handle_write(struct fakeswitch *fs, int* ptr_nr_pktin_to_
     }
     // send any data if it's queued
     if( msgbuf_count_buffered(fs->outbuf) > 0)
-        msgbuf_write(fs->outbuf, fs->sock, 0);
+        msgbuf_write(fs->outbuf, fs->sock, 0, fs->id);
 }
 /***********************************************************************/
 void fakeswitch_handle_io(struct fakeswitch *fs, void *pfd_events, int* ptr_nr_pktin_to_send)
