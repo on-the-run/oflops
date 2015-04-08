@@ -66,7 +66,10 @@ void print_response_time() {
 			if (!(itt->second->dirty)) {
 				//fprintf(stdout, "switch_id = %d, xid = %d, time = %f ms\n", it->first, itt->first, (itt->second->tp.tv_sec)*(1000) + (itt->second->tp.tv_nsec)/(1000000.0));
 				fprintf(fp, "switch_id,%d,xid,%d,time,%f,ms\n", it->first, itt->first, (itt->second->tp.tv_sec)*(1000) + (itt->second->tp.tv_nsec)/(1000000.0));
-				free(itt->second);
+				//TODO: free those pointers
+				//if (itt->second != NULL) {
+				//	free(itt->second);
+				//}
 			}
 		}
 	}
@@ -188,10 +191,15 @@ int timeout_connect(int fd, const char * hostname, int port, int mstimeout) {
     #ifdef USE_EPOLL
     struct epoll_event ev;
     int epollfd_ = epoll_create(1);
+	if (epollfd_ == -1) {
+		perror("epoll_create()");
+		return -1;
+	}
     ev.events = EPOLLIN | EPOLLOUT | EPOLLERR;
 	ev.data.fd = fd;
 	if(epoll_ctl(epollfd_, EPOLL_CTL_ADD, fd, &ev) == -1) {
 	    printf("Cannot use epoll to create connection\n");
+		perror("epoll_ctl()");
 	    return -1;
 	}
     #else

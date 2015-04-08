@@ -332,13 +332,42 @@ static int make_packet_in(int switch_id, int xid, int buffer_id, char * buf, int
     pi->header.version = OFP_VERSION;
     pi->header.xid = htonl(xid);
     pi->buffer_id = htonl(buffer_id);
+	pi->in_port = htons(129); // Yiyang - for Hydra fat-tree topo
     eth = (struct ether_header * ) pi->data;
     // copy into src mac addr; only 4 bytes, but should suffice to not confuse
     // the controller; don't overwrite first byte
-    memcpy(&eth->ether_shost[1], &mac_address, sizeof(mac_address));
+	/*
+    memcpy(&eth->ether_shost[0], &mac_address, sizeof(mac_address));
+	*/ // Yiyang
     // mark this as coming from us, mostly for debug
+	/*
     eth->ether_dhost[5] = switch_id;
     eth->ether_shost[5] = switch_id;
+	*/ // Yiyang
+
+	/////////////////////// Yiyang
+	short tmp = htons((short)switch_id);
+    switch_id = htonl(switch_id);
+    memcpy(&eth->ether_shost[0], &switch_id, sizeof(switch_id));
+    //eth->ether_shost[4] = mac_address;
+    //eth->ether_shost[4] = (short)switch_id;
+    memcpy(&eth->ether_shost[4], &tmp, sizeof(short));
+
+    int max_switch_id = 2560; //2560, 640
+    int min_switch_id = 1537; //1537, 385
+    //int max_local_mac = 16;
+    //int min_local_mac = 1;
+    int rand_switch_id = rand() % (max_switch_id - min_switch_id + 1) + min_switch_id;
+    //int rand_mac_address = rand() % (max_local_mac - min_local_mac + 1) + min_local_mac;
+	tmp = htons((short)rand_switch_id);
+    rand_switch_id = htonl(rand_switch_id);
+    memcpy(&eth->ether_dhost[0], &(rand_switch_id), sizeof(rand_switch_id));
+    //eth->ether_dhost[5] = rand_mac_address;
+    //eth->ether_dhost[4] = (short)rand_switch_id;
+    memcpy(&eth->ether_dhost[4], &tmp, sizeof(short));
+    //eth->ether_dhost[0] = 0;
+	/////////////////////// Yiyang
+
     return sizeof(fake);
 }
 
@@ -429,13 +458,13 @@ void fakeswitch_handle_read(struct fakeswitch *fs)
 								//fprintf(stdout, "diff sec = %d, nsec = %ld\n", timetable[fs->id][xid]->tp.tv_sec, timetable[fs->id][xid]->tp.tv_nsec);
 								timetable[fs->id][xid]->dirty = false;
 							} else {
-								fprintf(stderr, "[WARNING] Packet_out: Unexpected duplicate xid = %d, switch_id = %d\n", xid, fs->id);
+								//fprintf(stderr, "[WARNING] Packet_out: Unexpected duplicate xid = %d, switch_id = %d\n", xid, fs->id);
 							}
 						} else {
-							fprintf(stderr, "[WARNING] Packet_out: Unexpected xid = %d, switch_id = %d\n", xid, fs->id);
+							//fprintf(stderr, "[WARNING] Packet_out: Unexpected xid = %d, switch_id = %d\n", xid, fs->id);
 						}
 					} else {
-						fprintf(stderr, "[WARNING] Packet_out: Unexpected switch_id = %d\n", fs->id);
+						//fprintf(stderr, "[WARNING] Packet_out: Unexpected switch_id = %d\n", fs->id);
 					}
 					#endif
                 }
@@ -457,13 +486,13 @@ void fakeswitch_handle_read(struct fakeswitch *fs)
 								timetable[fs->id][xid]->tp.tv_nsec = tp_end.tv_nsec - timetable[fs->id][xid]->tp.tv_nsec;
 								timetable[fs->id][xid]->dirty = false;
 							} else {
-								fprintf(stderr, "[WARNING] Flow_mod: Unexpected duplicate xid = %d, switch_id = %d\n", xid, fs->id);
+								//fprintf(stderr, "[WARNING] Flow_mod: Unexpected duplicate xid = %d, switch_id = %d\n", xid, fs->id);
 							}
 						} else {
-							fprintf(stderr, "[WARNING] Flow_mod: Unexpected xid = %d, switch_id = %d\n", xid, fs->id);
+							//fprintf(stderr, "[WARNING] Flow_mod: Unexpected xid = %d, switch_id = %d\n", xid, fs->id);
 						}
 					} else {
-						fprintf(stderr, "[WARNING] Flow_mod: Unexpected switch_id = %d\n", fs->id);
+						//fprintf(stderr, "[WARNING] Flow_mod: Unexpected switch_id = %d\n", fs->id);
 					}
 					#endif
                 }
@@ -579,8 +608,9 @@ static void fakeswitch_handle_write(struct fakeswitch *fs, int* ptr_nr_pktin_to_
             
             fs->probe_state++;
             // TODO come back and remove this copy
-            count = make_packet_in(fs->id, fs->xid++, fs->current_buffer_id, buf, BUFLEN, fs->current_mac_address);
-            fs->current_mac_address = ( fs->current_mac_address + 1 ) % fs->total_mac_addresses;
+            //count = make_packet_in(fs->id, fs->xid++, fs->current_buffer_id, buf, BUFLEN, fs->current_mac_address);
+            count = make_packet_in(fs->id, fs->xid++, fs->current_buffer_id, buf, BUFLEN, fs->id);
+            //fs->current_mac_address = ( fs->current_mac_address + 1 ) % fs->total_mac_addresses;
             fs->current_buffer_id =  ( fs->current_buffer_id + 1 ) % NUM_BUFFER_IDS;
             msgbuf_push(fs->outbuf, buf, count);
             debug_msg(fs, "send message %d", i);
