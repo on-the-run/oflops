@@ -353,8 +353,8 @@ static int make_packet_in(int switch_id, int xid, int buffer_id, char * buf, int
     //eth->ether_shost[4] = (short)switch_id;
     memcpy(&eth->ether_shost[4], &tmp, sizeof(short));
 
-    int max_switch_id = 2560; //2560, 640
-    int min_switch_id = 1537; //1537, 385
+    int min_switch_id = 1537; //1537, 385, 25
+    int max_switch_id = 2560; //2560, 640, 40
     //int max_local_mac = 16;
     //int min_local_mac = 1;
     int rand_switch_id = rand() % (max_switch_id - min_switch_id + 1) + min_switch_id;
@@ -414,8 +414,11 @@ void fakeswitch_handle_read(struct fakeswitch *fs)
     if (count <= 0)
     {
         fprintf(stderr, "controller msgbuf_read() = %d:  ", count);
-        if(count < 0)
-            perror("msgbuf_read");
+        if(count < 0) {
+            perror("msgbuf_read() in fakeswitch_handle_read()");
+			fprintf(stderr, "==> fs->id = %d\n==> fs->xid = %d\n==> fs->probe_state = %d\n==> fs->probe_size = %d\n==> fs->count = %d\n",
+							 fs->id, fs->xid, fs->probe_state, fs->probe_size, fs->count);
+		}
         else
             fprintf(stderr, " closed connection ");
         fprintf(stderr, "... exiting\n");
@@ -640,6 +643,7 @@ void fakeswitch_handle_io(struct fakeswitch *fs, void *pfd_events, int* ptr_nr_p
     #ifdef USE_EPOLL
     int events = *((int*) pfd_events);
     if(events & EPOLLIN) {
+		//fprintf(stderr, "fakeswitch_handle_read() is called with fs->id = %d\n", fs->id);
         fakeswitch_handle_read(fs);
     } else if(events & EPOLLOUT) {
         fakeswitch_handle_write(fs, ptr_nr_pktin_to_send);

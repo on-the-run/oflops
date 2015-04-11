@@ -57,7 +57,9 @@ struct myargs my_options[] = {
     {0, 0, 0, MYARGS_NONE}
 };
 
+#ifdef USE_GPP
 void print_response_time() {
+	fprintf(stderr, "Strat dumping response time to file\n");
 	FILE* fp = fopen("respTime.dat", "w");
 	unordered_map<int, unordered_map<int, struct _timestamp*>>::const_iterator it = timetable.begin();
 	for (; it != timetable.end(); it++) {
@@ -75,6 +77,7 @@ void print_response_time() {
 	}
 	fclose(fp);
 }
+#endif
 
 /*******************************************************************/
 double run_test(int n_fakeswitches, struct fakeswitch * fakeswitches, int mstestlen, int delay, int rate)
@@ -110,7 +113,6 @@ double run_test(int n_fakeswitches, struct fakeswitch * fakeswitches, int mstest
         }
         
         int nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
-
 
         for(i = 0; i < nfds; i++) {
             fakeswitch_handle_io((struct fakeswitch*)events[i].data.ptr, &(events[i].events), &nr_pktin_to_send);
@@ -535,7 +537,9 @@ int main(int argc, char * argv[])
                 min, max, avg, std_dev);
     }
 
+	#ifdef USE_GPP
 	print_response_time();
+	#endif
 
     return 0;
 }
